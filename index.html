@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>N-BBANG 스마트 정산</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+</head>
+<body class="bg-gradient-to-br from-indigo-50 to-blue-100 min-h-screen py-8 px-4">
+    <div class="max-w-3xl mx-auto space-y-6">
+        
+        <!-- 헤더 -->
+        <div class="bg-white rounded-2xl shadow-xl p-6 text-center">
+            <h1 class="text-3xl font-extrabold text-indigo-600 mb-2">💸 N-BBANG 스마트 정산</h1>
+            <p class="text-gray-500 text-sm">함께 쓴 비용을 투명하고 깔끔하게 계산해 드립니다.</p>
+        </div>
+
+        <!-- 1. 참여자 관리 -->
+        <div class="bg-white rounded-2xl shadow-xl p-6">
+            <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">👥 참여자 명단</h2>
+            <div class="flex gap-2 mb-4">
+                <input type="text" id="participantInput" placeholder="참여자 이름 입력" class="flex-1 border border-gray-300 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <button onclick="addParticipant()" class="bg-indigo-600 text-white px-5 py-2 rounded-xl font-semibold hover:bg-indigo-700 transition">추가</button>
+            </div>
+            <div id="participantList" class="flex flex-wrap gap-2"></div>
+        </div>
+
+        <!-- 2. 지출 내역 입력 -->
+        <div class="bg-white rounded-2xl shadow-xl p-6">
+            <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">🧾 지출 내역 입력</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                <input type="text" id="itemDesc" placeholder="항목명 (예: 삼겹살)" class="border border-gray-300 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <input type="number" id="itemPrice" placeholder="금액 (원)" class="border border-gray-300 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <select id="itemBuyer" class="border border-gray-300 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                    <option value="">구매자 선택</option>
+                </select>
+            </div>
+            <button onclick="addItem()" class="w-full bg-emerald-600 text-white py-3 rounded-xl font-semibold hover:bg-emerald-700 transition">지출 내역 추가하기</button>
+
+            <!-- 내역 테이블 -->
+            <div class="mt-6 overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b text-gray-600 text-sm">
+                            <th class="py-3 px-4">항목</th>
+                            <th class="py-3 px-4">구매자</th>
+                            <th class="py-3 px-4 text-right">금액</th>
+                            <th class="py-3 px-4 text-center">관리</th>
+                        </tr>
+                    </thead>
+                    <tbody id="itemTableBody" class="divide-y divide-gray-100 text-gray-700 text-sm">
+                        <tr><td colspan="4" class="text-center py-4 text-gray-400">등록된 지출 내역이 없습니다.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 3. 정산 결과 -->
+        <div class="bg-white rounded-2xl shadow-xl p-6">
+            <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center">📊 정산 결과 요약</h2>
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div class="bg-indigo-50 p-4 rounded-xl text-center">
+                    <p class="text-xs text-indigo-500 font-semibold mb-1">총 지출 금액</p>
+                    <p id="totalSpent" class="text-2xl font-bold text-indigo-700">0원</p>
+                </div>
+                <div class="bg-blue-50 p-4 rounded-xl text-center">
+                    <p class="text-xs text-blue-500 font-semibold mb-1">1인당 부담금</p>
+                    <p id="perPerson" class="text-2xl font-bold text-blue-700">0원</p>
+                </div>
+            </div>
+
+            <h3 class="font-bold text-gray-700 mb-3">💸 송금 가이드 (누가 누구에게 얼마를?)</h3>
+            <div id="transferGuide" class="space-y-2">
+                <p class="text-sm text-gray-400 text-center py-2">참여자 등록 및 지출 내역을 입력해 주세요.</p>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        let participants = JSON.parse(localStorage.getItem('n_participants')) || [];
+        let items = JSON.parse(localStorage.getItem('n_items')) || [];
+
+        function saveData() {
+            localStorage.setItem('n_participants', JSON.stringify(participants));
+            localStorage.setItem('n_items', JSON.stringify(items));
+            render();
+        }
+
+        function addParticipant() {
+            const input = document.getElementById('participantInput');
+            const name = input.value.trim();
+            if (!name) return alert('이름을 입력하세요.');
+            if (participants.includes(name)) return alert('이미 존재하는 이름입니다.');
+            participants.push(name);
+            input.value = '';
+            saveData();
+        }
+
+        function removeParticipant(name) {
+            participants = participants.filter(p => p !== name);
+            items = items.filter(i => i.buyer !== name);
+            saveData();
+        }
+
+        function addItem() {
+            const desc = document.getElementById('itemDesc').value.trim();
+            const price = parseInt(document.getElementById('itemPrice').value);
+            const buyer = document.getElementById('itemBuyer').value;
+
+            if (!desc) return alert('항목명을 입력하세요.');
+            if (isNaN(price) || price <= 0) return alert('올바른 금액을 입력하세요.');
+            if (!buyer) return alert('구매자를 선택하세요.');
+
+            items.push({ id: Date.now(), desc, price, buyer });
+            document.getElementById('itemDesc').value = '';
+            document.getElementById('itemPrice').value = '';
+            saveData();
+        }
+
+        function removeItem(id) {
+            items = items.filter(i => i.id !== id);
+            saveData();
+        }
+
+        function render() {
+            // 참여자 렌더링
+            const pList = document.getElementById('participantList');
+            pList.innerHTML = participants.length === 0 ? '<span class="text-sm text-gray-400">참여자가 없습니다.</span>' : '';
+            participants.forEach(p => {
+                pList.innerHTML += `<span class="bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-full text-sm font-medium flex items-center gap-2">${p} <button onclick="removeParticipant('${p}')" class="text-indigo-400 hover:text-red-500 font-bold">&times;</button></span>`;
+            });
+
+            // 셀렉트 박스 업데이트
+            const bSelect = document.getElementById('itemBuyer');
+            bSelect.innerHTML = '<option value="">구매자 선택</option>';
+            participants.forEach(p => {
+                bSelect.innerHTML += `<option value="${p}">${p}</option>`;
+            });
+
+            // 테이블 렌더링
+            const tBody = document.getElementById('itemTableBody');
+            if (items.length === 0) {
+                tBody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-gray-400">등록된 지출 내역이 없습니다.</td></tr>`;
+            } else {
+                tBody.innerHTML = '';
+                items.forEach(i => {
+                    tBody.innerHTML += `
+                        <tr class="border-b border-gray-50">
+                            <td class="py-3 px-4 font-medium">${i.desc}</td>
+                            <td class="py-3 px-4"><span class="bg-gray-100 px-2.5 py-1 rounded-md text-xs">${i.buyer}</span></td>
+                            <td class="py-3 px-4 text-right font-semibold">${i.price.toLocaleString()}원</td>
+                            <td class="py-3 px-4 text-center"><button onclick="removeItem(${i.id})" class="text-red-400 hover:text-red-600 text-sm">삭제</button></td>
+                        </tr>
+                    `;
+                });
+            }
+
+            // 계산 로직
+            const totalSpent = items.reduce((sum, i) => sum + i.price, 0);
+            document.getElementById('totalSpent').innerText = totalSpent.toLocaleString() + '원';
+
+            const count = participants.length;
+            const perPerson = count > 0 ? Math.round(totalSpent / count) : 0;
+            document.getElementById('perPerson').innerText = perPerson.toLocaleString() + '원';
+
+            // 개인별 차액 계산 (내가 쓴 돈 - N빵 부담금)
+            const balance = {};
+            participants.forEach(p => balance[p] = 0);
+            items.forEach(i => {
+                if (balance[i.buyer] !== undefined) {
+                    balance[i.buyer] += i.price;
+                }
+            });
+
+            participants.forEach(p => {
+                balance[p] -= perPerson;
+            });
+
+            // 송금 가이드 최적화 계산
+            const gDiv = document.getElementById('transferGuide');
+            if (count === 0 || items.length === 0) {
+                gDiv.innerHTML = '<p class="text-sm text-gray-400 text-center py-2">참여자 등록 및 지출 내역을 입력해 주세요.</p>';
+                return;
+            }
+
+            let debtors = [];
+            let creditors = [];
+
+            for (let p in balance) {
+                if (balance[p] < -1) debtors.push({ name: p, amount: -balance[p] });
+                if (balance[p] > 1) creditors.push({ name: p, amount: balance[p] });
+            }
+
+            debtors.sort((a, b) => b.amount - a.amount);
+            creditors.sort((a, b) => b.amount - a.amount);
+
+            let transfers = [];
+            let dIdx = 0, cIdx = 0;
+
+            while (dIdx < debtors.length && cIdx < creditors.length) {
+                let d = debtors[dIdx];
+                let c = creditors[cIdx];
+                let amt = Math.min(d.amount, c.amount);
+
+                transfers.push(`👉 <b>${d.name}</b> 님께서 <b>${c.name}</b> 님에게 <span class="text-indigo-600 font-bold">${amt.toLocaleString()}원</span> 송금`);
+
+                d.amount -= amt;
+                c.amount -= amt;
+
+                if (d.amount === 0) dIdx++;
+                if (c.amount === 0) cIdx++;
+            }
+
+            if (transfers.length === 0) {
+                gDiv.innerHTML = '<p class="text-sm text-emerald-600 font-medium text-center py-2">모든 정산이 완벽하게 맞아 떨어졌습니다! 🎉</p>';
+            } else {
+                gDiv.innerHTML = transfers.map(t => `<div class="bg-gray-50 p-3 rounded-xl text-sm">${t}</div>`).join('');
+            }
+        }
+
+        render();
+    </script>
+</body>
+</html>
